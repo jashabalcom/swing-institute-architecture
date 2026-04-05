@@ -1,7 +1,7 @@
 # Swing Institute — Production Architecture
 
 > **AI-Enhanced Baseball Training SaaS**
-> Live at [swinginstitute.com](https://main.d1d7lnmngr8uwt.amplifyapp.com) | Serving competitive athletes in Atlanta and nationwide
+> Live at [swinginstitute.com](https://www.swinginstitutebaseball.com) | Serving competitive athletes in Atlanta and nationwide
 
 Production multi-tenant SaaS platform for baseball player development — video coaching, structured curriculum, real-time community, subscription billing, and event management. Built serverless-first on AWS.
 
