@@ -83,10 +83,9 @@ AWS icons rendered via iconify pack in Mermaid `architecture-beta`. Full archite
 ## Read this repo in order
 
 1. **[ARCHITECTURE.md](ARCHITECTURE.md)** — system design deep dive: logical architecture, physical AWS topology, request flows, data model, trust boundaries, scalability posture, observability.
-2. **[ENGINEERING-DECISIONS.md](ENGINEERING-DECISIONS.md)** — 15 ADRs. Each decision has context, alternatives considered, trade-offs accepted, and current status.
+2. **[ENGINEERING-DECISIONS.md](ENGINEERING-DECISIONS.md)** — 14 ADRs. Each decision has context, alternatives considered, trade-offs accepted, and current status.
 3. **[BUILD-TIMELINE.md](BUILD-TIMELINE.md)** — 18-stage narrative of what shipped and why, drawn from 564 commits on `main`.
 4. **[AWS-DEPLOYMENT-PLAN.md](AWS-DEPLOYMENT-PLAN.md)** — phased migration plan from the current Supabase/Amplify setup to AWS-native (Aurora Serverless v2, Lambda, API Gateway, Cognito) when scale demands it.
-5. **[INTERVIEW-GUIDE.md](INTERVIEW-GUIDE.md)** — how to walk a hiring manager or technical interviewer through the system.
 
 ---
 
@@ -125,7 +124,7 @@ This codebase is the reference point for:
 - **Solutions architecture** — multi-service AWS design, edge-first backend, phased cloud migration plan.
 - **Production engineering** — atomic concurrency, webhook-as-source-of-truth payments, idempotent scheduled jobs, self-healing push delivery.
 - **Product engineering** — one codebase to three platforms, hybrid on-device + cloud AI pipeline, RBAC with RLS enforced at the database layer.
-- **Operational rigor** — 89 migrations without breakage, 15 ADRs, a launch-readiness dashboard that turns go/no-go into a single pane of glass.
+- **Operational rigor** — 89 migrations without breakage, 14 ADRs, a launch-readiness dashboard that turns go/no-go into a single pane of glass.
 
 ---
 

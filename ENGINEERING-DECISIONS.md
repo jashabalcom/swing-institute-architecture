@@ -183,7 +183,7 @@ Either you got the credit (row returned) or you didn't. No TOCTOU window.
 
 **Context.** Production-verified code (notification pipeline, credit RPCs, Stripe webhook, SES config) was broken multiple times by well-intentioned refactors that didn't understand the runtime constraints (listener ordering, upsert vs delete-insert, signature verification).
 
-**Decision.** Mark the files in `CLAUDE.md` with a PROTECTED header explaining why they're sensitive and what breaks if changed. Every maintainer (human or AI) reads `CLAUDE.md` as part of their onboarding.
+**Decision.** Mark the files in a root-level change-control document with a PROTECTED header explaining why they're sensitive and what breaks if changed. Every maintainer reads that document as part of their onboarding.
 
 **Alternatives considered.**
 1. **CODEOWNERS + PR review gate.** Strong but doesn't prevent the refactor from being proposed in the first place.
@@ -192,10 +192,10 @@ Either you got the credit (row returned) or you didn't. No TOCTOU window.
 
 **Trade-offs accepted.**
 - **Pro:** a single discoverable location for "don't touch this without reading why."
-- **Pro:** readable by humans and AI assistants alike — the AI-collab workflow reads `CLAUDE.md` on every session start.
+- **Pro:** durable across refactors — it survives what inline comments don't.
 - **Con:** depends on discipline. Mitigated by keeping the list short (4 surfaces).
 
-**Status.** Accepted. See `CLAUDE.md` "PROTECTED" sections.
+**Status.** Accepted.
 
 ---
 
@@ -285,21 +285,6 @@ Either you got the credit (row returned) or you didn't. No TOCTOU window.
 - **Con:** no retry orchestration. Mitigated by idempotent predicates and a reconciliation job that sweeps up anything a cron missed.
 
 **Status.** Accepted. pg_cron status is surfaced in the launch-readiness dashboard.
-
----
-
-## ADR-015 — Worktree-based AI-assisted development workflow
-
-**Context.** Development uses Claude Code for pair programming. Running multiple parallel experiments (e.g., refactor the pose pipeline while also fixing a UI bug) is common. Single working directory = merge conflicts and broken state.
-
-**Decision.** Every non-trivial task runs in an isolated git worktree under `.claude/worktrees/*`, scoped to a feature branch. Tasks merge back only when tests and lint pass.
-
-**Trade-offs accepted.**
-- **Pro:** parallel streams of work without dirtying main.
-- **Pro:** fast revert — bad branch, delete the worktree.
-- **Con:** disk cost (each worktree is a full checkout). Acceptable.
-
-**Status.** Accepted. Encoded in the repo's `.claude/` configuration.
 
 ---
 

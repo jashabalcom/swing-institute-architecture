@@ -324,13 +324,6 @@ Looking across 564 commits, certain patterns repeat:
 3. **Revert-on-doubt.** Experiments that didn't pan out get reverted cleanly (recent branding refresh rolled back via two reverts) — branches stay shippable.
 4. **Post-feature hardening.** `CTO audit: security hardening, error visibility, and production optimization` is a deliberate audit commit pattern that surfaces regularly.
 5. **Type hygiene sweeps.** `Regenerate Supabase types and remove 109 as-any casts` — periodic type debt payment rather than letting it compound.
-6. **Protected-surfaces discipline.** When a system becomes production-critical (notifications, Stripe, credits), it gets marked PROTECTED in `CLAUDE.md` to signal change-control to future contributors.
+6. **Protected-surfaces discipline.** When a system becomes production-critical (notifications, Stripe, credits), it gets marked PROTECTED in a change-control document to signal caution to future contributors.
 
----
-
-## For a hiring manager
-
-If you're reading this as an evaluator:
-- **Volume ≠ quality, but this volume (564 commits across 18+ stages) is backed by discipline:** plan → build → harden → protect.
-- **Each stage solves a concrete business problem, not a résumé line item.** Stages 5–6 ship an AI surface because users need instant feedback; stage 9 ships Stripe Connect because coaches need to get paid.
-- **The architecture holds up under scrutiny.** See [ARCHITECTURE.md](ARCHITECTURE.md) for how each stage's pieces fit together, and [ENGINEERING-DECISIONS.md](ENGINEERING-DECISIONS.md) for why each choice was made over its alternatives.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit together, and [ENGINEERING-DECISIONS.md](ENGINEERING-DECISIONS.md) for the rationale behind each major choice.
