@@ -1,200 +1,137 @@
-# Swing Institute — Production Architecture
+# Swing Institute — Architecture Reference
 
-> **AI-Enhanced Baseball Training SaaS**
-> Live at [swinginstitute.com](https://www.swinginstitutebaseball.com) | Serving competitive athletes in Atlanta and nationwide
+**Public architecture + decision record for a production baseball-training SaaS (web + iOS).**
 
-Production multi-tenant SaaS platform for baseball player development — video coaching, structured curriculum, real-time community, subscription billing, and event management. Built serverless-first on AWS.
+The application code lives in a private repository. This repo exists so engineers, architects, and hiring managers can read the system design, the decisions behind it, and the build history without needing source access.
 
----
-
-## System Architecture
-
-```
-                           Internet
-                              |
-                    +-------------------+
-                    |    Route 53       |
-                    |    DNS + TLS      |
-                    +--------+----------+
-                             |
-                    +--------v----------+
-                    |   AWS Amplify     |
-                    |   CloudFront CDN  |
-                    |   React SPA       |
-                    +--------+----------+
-                             |
-              +--------------+--------------+
-              |                             |
-    +---------v----------+       +----------v-----------+
-    |   Auth Layer       |       |   9 Edge Functions   |
-    |                    |       |                      |
-    |  JWT + RLS         |       |  Payments            |
-    |  Role-based access |       |  Booking engine      |
-    |  Session mgmt      |       |  Email service       |
-    |                    |       |  CRM sync            |
-    +--------------------+       |  Availability API    |
-                                 +----------+-----------+
-                                            |
-              +-----------------------------+-----------------------------+
-              |                             |                             |
-    +---------v----------+       +----------v-----------+      +----------v-----------+
-    |   PostgreSQL       |       |   Stripe             |      |   Resend → SES       |
-    |                    |       |                      |      |                      |
-    |  37 tables, RLS    |       |  6 subscription      |      |  10 transactional    |
-    |  18 migrations     |       |  tiers               |      |  email templates     |
-    |  Realtime PubSub   |       |  Webhook lifecycle   |      |  Coach + athlete     |
-    +--------------------+       +----------------------+      |  notifications       |
-                                                               +----------------------+
-```
+[![Live](https://img.shields.io/badge/live-swinginstitutebaseball.com-1B2A4A)](https://www.swinginstitutebaseball.com)
+[![Stack](https://img.shields.io/badge/stack-AWS%20Bedrock%20%7C%20Supabase%20%7C%20Stripe%20Connect%20%7C%20Capacitor-FF9900)](#tech-stack)
 
 ---
 
-## What It Does
+## What this platform is
 
-**Athlete Experience:** Sign up → onboarding flow → personalized dashboard with phase-based training (Foundation → Advanced), weekly drills, video submission via OnForm, community access, lesson booking with calendar + time slots, package/membership purchase via Stripe.
+Swing Institute is a full-stack athlete-development platform used by MLB players, collegiate athletes, and youth prospects. It combines:
 
-**Coach/Admin Experience:** Admin dashboard with revenue metrics, member management (profiles, roles, tiers), booking calendar with status management, curriculum CMS (levels → modules → lessons with video), event management (workshops, clinics, guest athletes), schedule/availability editor.
+- An **AI swing-analysis engine** (phone video → AWS Bedrock Claude Sonnet 4 Vision → MLB-benchmarked biomechanical scorecard in ~8 s).
+- A **coaching marketplace** with Stripe Connect Express payouts, GPS-verified check-in, and mutual session confirmation.
+- An **on-demand academy** (Levels → Modules → Lessons, progress tracking).
+- A **live-session WebRTC room** (Daily.co) with transcription.
+- A **community layer** (posts, DMs, group chats, polls, moderation).
+- A **parent dashboard** with COPPA-compliant child accounts.
+- Four **partner-program landing pages** (Coach / NIL / Ambassador / Affiliate) with variant-driven components.
+- A **20-page admin surface** including a launch-readiness dashboard with 13 automated checks.
 
-**Community:** Real-time posts, direct messaging, channels (Announcements, Q&A, Player Wins, Parents Room), reactions, polls, mentions, image upload, GIF picker. All powered by PostgreSQL realtime subscriptions.
-
----
-
-## Technical Decisions
-
-### Why Serverless-First
-No idle compute. Edge functions handle spiky traffic (booking rushes, event registrations) without provisioning. Infrastructure cost at launch: **$30/month** serving paying customers. Projected cost at 500 users: **~$0.15/user/month**.
-
-### Why PostgreSQL with RLS (Not DynamoDB)
-Relational data model is natural for this domain — users have bookings, bookings reference service types, service types have pricing tiers. Row-Level Security eliminates an entire class of authorization bugs: the database enforces "users can only see their own data" at the query level, not the application level. 37 tables, all protected.
-
-### Why Code Splitting Matters Here
-41 page routes lazy-loaded via `React.lazy`. Parents checking their kid's training schedule shouldn't download the admin dashboard code. Initial bundle went from monolithic to route-level chunks — the booking page loads only what it needs.
-
-### Why Stripe Webhooks (Not Polling)
-Subscription state (active, past_due, canceled) is driven by Stripe webhooks hitting an edge function, which updates the database. The app never polls Stripe — it reads local state. This means zero Stripe API calls during normal user sessions, and subscription status is always consistent.
+Single TypeScript codebase → web (AWS Amplify + CloudFront) + iOS App Store (Capacitor 8) + PWA.
 
 ---
 
-## Data Model (37 Tables)
+## Architecture at a glance
 
-```
-Users & Auth              Bookings & Commerce       Content & Learning
-──────────────            ──────────────────        ──────────────────
-profiles                  bookings                  curriculum_levels
-user_roles                service_types             curriculum_modules
-                          coach_availability        lessons
-Community                 blocked_times             lesson_completions
-──────────────            packages                  drills
-posts                     purchased_packages        drill_completions
-comments                  user_packages             video_submissions
-direct_messages
-channels                  Events                    Gamification
-channel_members           ──────                    ────────────
-polls / poll_votes        events                    points
-mentions / reactions      event_registrations       badges / user_badges
-                          notifications
+```mermaid
+architecture-beta
+    group client(logos:apple)[Clients]
+    group edgeAWS(logos:aws)[AWS Edge + CDN]
+    group api(logos:supabase-icon)[Supabase Control Plane]
+    group dataPlane(logos:postgresql)[Data Plane]
+    group aiPlane(logos:aws)[AWS AI and Messaging]
+    group money(logos:stripe)[Payments]
+
+    service iphone(logos:apple)[iOS App] in client
+    service browser(logos:chrome)[Web Browser] in client
+
+    service acm(logos:aws-certificate-manager)[ACM TLS] in edgeAWS
+    service amplify(logos:aws-amplify)[Amplify Hosting] in edgeAWS
+    service cf(logos:aws-cloudfront)[CloudFront CDN] in edgeAWS
+    service r53(logos:aws-route53)[Route 53 DNS] in edgeAWS
+
+    service sbauth(logos:supabase-icon)[Auth JWT] in api
+    service sbfn(logos:deno)[Deno Edge Fns 35x] in api
+    service sbstor(logos:supabase-icon)[Storage buckets] in api
+    service sbrt(logos:supabase-icon)[Realtime] in api
+
+    service pg(logos:postgresql)[Postgres 15] in dataPlane
+    service rpc(logos:postgresql)[Atomic RPCs] in dataPlane
+
+    service bedrock(logos:aws)[Bedrock Sonnet 4] in aiPlane
+    service ses(logos:aws)[SES] in aiPlane
+    service apns(logos:apple)[APNs] in aiPlane
+
+    service stripe(logos:stripe)[Stripe + Connect] in money
+
+    iphone:R --> L:cf
+    browser:R --> L:cf
+    r53:B --> T:cf
+    acm:B --> T:cf
+    cf:R --> L:amplify
+    amplify:R --> L:sbauth
+    sbauth:R --> L:sbfn
+    sbfn:B --> T:pg
+    sbfn:R --> L:bedrock
+    sbfn:R --> L:ses
+    sbfn:R --> L:apns
+    sbfn:R --> L:stripe
+    pg:R --> L:rpc
+    pg:T --> B:sbrt
+    sbrt:L --> R:browser
 ```
 
----
-
-## Security
-
-| Layer | Implementation |
-|-------|---------------|
-| **Data access** | Row-Level Security on all 37 tables |
-| **Authentication** | JWT with automatic refresh, session persistence |
-| **Authorization** | Role-based (`admin`, `coach`, `member`) checked at route and API level |
-| **Secrets** | All API keys in encrypted vault — zero hardcoded credentials |
-| **Input validation** | Zod schemas on all user-facing forms |
-| **Error handling** | ErrorBoundary catches render failures; try/catch on all async operations |
-| **CORS** | Restricted origins on all edge functions |
+AWS icons rendered via iconify pack in Mermaid `architecture-beta`. Full architecture with 6 diagrams (logical, physical, AI sequence, payout sequence, notification fan-out, ERD) in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ---
 
-## Payments Architecture
+## Read this repo in order
 
-```
-User clicks "Subscribe" or "Book"
-         |
-         v
-  create-checkout edge function
-         |
-         v
-  Stripe Checkout Session (hosted)
-         |
-    [user pays]
-         |
-         v
-  stripe-webhook edge function
-         |
-    ┌────┴────────────────────────┐
-    |  checkout.session.completed |
-    |  subscription.created      |
-    |  subscription.updated      |
-    |  subscription.deleted      |
-    |  invoice.payment_succeeded |
-    |  invoice.payment_failed    |
-    └────┬────────────────────────┘
-         |
-         v
-  Update profiles table
-  (membership_tier, subscription_status,
-   stripe_customer_id, credits)
-         |
-         v
-  send-booking-confirmation
-  (email to athlete + coach)
-```
-
-**6 membership tiers** from Community ($49/mo) to Hybrid Pro ($449/mo), each with different lesson rates, review quotas, and feature access.
+1. **[ARCHITECTURE.md](ARCHITECTURE.md)** — system design deep dive: logical architecture, physical AWS topology, request flows, data model, trust boundaries, scalability posture, observability.
+2. **[ENGINEERING-DECISIONS.md](ENGINEERING-DECISIONS.md)** — 15 ADRs. Each decision has context, alternatives considered, trade-offs accepted, and current status.
+3. **[BUILD-TIMELINE.md](BUILD-TIMELINE.md)** — 18-stage narrative of what shipped and why, drawn from 564 commits on `main`.
+4. **[AWS-DEPLOYMENT-PLAN.md](AWS-DEPLOYMENT-PLAN.md)** — phased migration plan from the current Supabase/Amplify setup to AWS-native (Aurora Serverless v2, Lambda, API Gateway, Cognito) when scale demands it.
+5. **[INTERVIEW-GUIDE.md](INTERVIEW-GUIDE.md)** — how to walk a hiring manager or technical interviewer through the system.
 
 ---
 
-## AWS Migration Path
+## Tech stack
 
-Currently deployed on Amplify with Supabase backend. Migration to full AWS is planned and architected — each component has a direct replacement:
-
-| Current | AWS Target | Trigger |
-|---------|-----------|---------|
-| Supabase Auth | Cognito (user pools, MFA) | Need SSO or compliance |
-| Supabase PostgreSQL | Aurora Serverless v2 | Need scaling beyond Supabase limits |
-| Supabase Edge Functions | Lambda + API Gateway | Need custom runtimes or VPC access |
-| Resend | SES | Cost optimization at volume |
-| Supabase Storage | S3 + CloudFront | Video library scaling |
-| Supabase Realtime | API Gateway WebSocket + DynamoDB Streams | Need custom PubSub logic |
-
-Migration order is designed to be incremental — swap one service at a time with zero downtime. Database migration via DMS with continuous replication.
-
----
-
-## Stack
-
-```
-Frontend     React 18 · TypeScript · Vite 5 · Tailwind CSS · Shadcn/UI
-State        React Query · Context API · Supabase Realtime subscriptions
-Auth         JWT · Row-Level Security · Role-based access control
-Database     PostgreSQL · 37 tables · 18 migrations · RLS on all tables
-Backend      9 Edge Functions (Deno runtime)
-Payments     Stripe Checkout · Webhooks · Customer Portal · 6 tiers
-Email        Resend · 10 transactional templates · Coach + athlete notifications
-CRM          GoHighLevel · Contact sync · Booking sync · Quiz data sync
-Analytics    Meta Pixel · Google Analytics · GTM · A/B testing
-Hosting      AWS Amplify · CloudFront CDN · ACM SSL
-```
+| Concern | Choice |
+|---|---|
+| Frontend | Vite 6, React 18, TypeScript, TailwindCSS 3, shadcn/ui, TanStack Query, React Router v6 |
+| Mobile | Capacitor 8 + native Swift plugins (Apple Vision pose detection, Sign in with Apple) |
+| Backend | 35 Deno Edge Functions on Supabase |
+| Database | Postgres 15 with Row-Level Security, 89 forward-only migrations, pg_cron for scheduled jobs |
+| AI / ML | AWS Bedrock (Claude Sonnet 4 vision) via `aws4fetch` SIG V4; MediaPipe Tasks Vision (web); Apple `VNDetectHumanBodyPoseRequest` (iOS) |
+| Payments | Stripe Checkout, Stripe Connect Express, Customer Portal, atomic credit RPCs, signed webhooks, daily reconciliation |
+| Email | AWS SES with SIG V4 signing, 80+ branded transactional templates |
+| Push | Apple APNs HTTP/2 direct, dual sandbox + production endpoint retry, auto dead-token cleanup |
+| Live video | Daily.co WebRTC rooms + transcription |
+| CRM | GoHighLevel sync on signup |
+| Hosting | AWS Amplify + CloudFront + ACM + Route 53 |
+| Observability | Sentry; custom launch-readiness dashboard with 13 automated checks |
+| Testing | Vitest, Playwright (E2E on partner-application flows) |
 
 ---
 
-## Cost at Scale
+## Scale and cost posture
 
-| Users | Monthly Cost | Per User |
-|-------|-------------|----------|
-| 0-50 | $30 | — |
-| 100 | $45 | $0.45 |
-| 500 | $75 | $0.15 |
-| 500+ (full AWS) | $60-140 | $0.12-0.28 |
+**Launch tier (0–500 MAU):** ~$75–130/mo total across AWS + Supabase + Stripe (variable).
 
-Industry SaaS infrastructure benchmark: $1-5/user/month. This architecture runs at **5-10x below benchmark**.
+**Phase-2 target (500–5000 MAU):** migrate to AWS-native per [AWS-DEPLOYMENT-PLAN.md](AWS-DEPLOYMENT-PLAN.md). Order: frontend → auth → data → functions. AWS DMS handles logical replication during DB cutover.
 
 ---
 
-*Architecture documentation for a live production platform. Source code is in a private repository.*
+## What this demonstrates
+
+This codebase is the reference point for:
+
+- **Solutions architecture** — multi-service AWS design, edge-first backend, phased cloud migration plan.
+- **Production engineering** — atomic concurrency, webhook-as-source-of-truth payments, idempotent scheduled jobs, self-healing push delivery.
+- **Product engineering** — one codebase to three platforms, hybrid on-device + cloud AI pipeline, RBAC with RLS enforced at the database layer.
+- **Operational rigor** — 89 migrations without breakage, 15 ADRs, a launch-readiness dashboard that turns go/no-go into a single pane of glass.
+
+---
+
+## Author
+
+**Jasha Balcom** — Solutions Architect & Full-Stack Engineer. Former Chicago Cubs prospect and MLB performance coach. AWS-certified cloud practitioner.
+
+- Live product: [swinginstitutebaseball.com](https://www.swinginstitutebaseball.com)
+- Private application repo: `jashabalcom/swinginsitute` (access on request)
