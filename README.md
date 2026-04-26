@@ -31,7 +31,7 @@ Single TypeScript codebase → web (AWS Amplify + CloudFront) + iOS App Store (C
 ```mermaid
 architecture-beta
     group client(logos:apple)[Clients]
-    group edgeAWS(logos:aws)[AWS Edge + CDN]
+    group edgeAWS(logos:aws)[AWS Edge and CDN]
     group api(logos:supabase-icon)[Supabase Control Plane]
     group dataPlane(logos:postgresql)[Data Plane]
     group aiPlane(logos:aws)[AWS AI and Messaging]
@@ -57,7 +57,7 @@ architecture-beta
     service ses(logos:aws)[SES] in aiPlane
     service apns(logos:apple)[APNs] in aiPlane
 
-    service stripe(logos:stripe)[Stripe + Connect] in money
+    service stripe(logos:stripe)[Stripe Connect] in money
 
     iphone:R --> L:cf
     browser:R --> L:cf

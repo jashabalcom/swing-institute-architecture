@@ -67,7 +67,7 @@ flowchart LR
       bedrock[AWS Bedrock<br/>Claude Sonnet 4 vision]
       ses[AWS SES<br/>SIG V4]
       apns[Apple APNs]
-      stripe[Stripe + Connect]
+      stripe[Stripe Connect]
       daily[Daily.co WebRTC]
       ghl[GoHighLevel CRM]
     end
@@ -111,7 +111,7 @@ Below uses Mermaid's `architecture-beta` with iconify AWS icon pack — GitHub r
 ```mermaid
 architecture-beta
     group client(logos:apple)[Clients]
-    group edgeAWS(logos:aws)[AWS Edge + CDN]
+    group edgeAWS(logos:aws)[AWS Edge and CDN]
     group api(logos:supabase-icon)[Supabase Control Plane]
     group dataPlane(logos:postgresql)[Data Plane]
     group aiPlane(logos:aws)[AWS AI and Messaging]
@@ -137,7 +137,7 @@ architecture-beta
     service ses(logos:aws)[SES] in aiPlane
     service apns(logos:apple)[APNs] in aiPlane
 
-    service stripe(logos:stripe)[Stripe + Connect] in money
+    service stripe(logos:stripe)[Stripe Connect] in money
 
     iphone:R --> L:cf
     browser:R --> L:cf
