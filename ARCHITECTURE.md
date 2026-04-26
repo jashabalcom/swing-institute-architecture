@@ -67,7 +67,7 @@ flowchart LR
       bedrock[AWS Bedrock<br/>Claude Sonnet 4 vision]
       ses[AWS SES<br/>SIG V4]
       apns[Apple APNs]
-      stripe[Stripe Connect]
+      stripe[Stripe + Connect]
       daily[Daily.co WebRTC]
       ghl[GoHighLevel CRM]
     end
@@ -106,57 +106,87 @@ flowchart LR
 
 ## 3. Physical architecture (AWS + Supabase)
 
-Below uses Mermaid's `architecture-beta` with iconify AWS icon pack — GitHub renders these natively.
+Mermaid `flowchart` with branded fill colors (AWS orange, Supabase green, Stripe purple, Postgres blue, Apple charcoal). For a hero-grade static asset using the official AWS Architecture Icons, see the note at the end of this section.
 
 ```mermaid
-architecture-beta
-    group client(logos:apple)[Clients]
-    group edgeAWS(logos:aws)[AWS Edge and CDN]
-    group api(logos:supabase-icon)[Supabase Control Plane]
-    group dataPlane(logos:postgresql)[Data Plane]
-    group aiPlane(logos:aws)[AWS AI and Messaging]
-    group money(logos:stripe)[Payments]
+flowchart TB
+    subgraph CLIENTS["Clients"]
+        direction LR
+        ios["iOS App<br/>(Capacitor 8)"]
+        web["Web Browser<br/>(SPA)"]
+    end
 
-    service iphone(logos:apple)[iOS App] in client
-    service browser(logos:chrome)[Web Browser] in client
+    subgraph EDGE["AWS Edge / CDN"]
+        direction LR
+        r53["Route 53<br/>DNS"]
+        acm["ACM<br/>(TLS)"]
+        cf["CloudFront<br/>(CDN)"]
+        amp["Amplify Hosting"]
+    end
 
-    service acm(logos:aws-certificate-manager)[ACM TLS] in edgeAWS
-    service amplify(logos:aws-amplify)[Amplify Hosting] in edgeAWS
-    service cf(logos:aws-cloudfront)[CloudFront CDN] in edgeAWS
-    service r53(logos:aws-route53)[Route 53 DNS] in edgeAWS
+    subgraph SUPABASE["Supabase Control Plane"]
+        direction LR
+        sbauth["Auth (JWT)"]
+        sbfn["35 Deno Edge Functions"]
+        sbstor["Storage Buckets"]
+        sbrt["Realtime"]
+    end
 
-    service sbauth(logos:supabase-icon)[Auth JWT] in api
-    service sbfn(logos:deno)[Deno Edge Fns 35x] in api
-    service sbstor(logos:supabase-icon)[Storage buckets] in api
-    service sbrt(logos:supabase-icon)[Realtime] in api
+    subgraph DATA["Data Plane"]
+        direction LR
+        pg[("Postgres 15<br/>RLS, 89 migrations")]
+        rpc[/"Atomic RPCs"/]
+    end
 
-    service pg(logos:postgresql)[Postgres 15] in dataPlane
-    service rpc(logos:postgresql)[Atomic RPCs] in dataPlane
+    subgraph AIPLANE["AWS AI / Messaging"]
+        direction LR
+        bedrock["Bedrock<br/>Claude Sonnet 4 Vision"]
+        ses["SES<br/>(SIG V4)"]
+        apns["APNs HTTP/2"]
+    end
 
-    service bedrock(logos:aws)[Bedrock Sonnet 4] in aiPlane
-    service ses(logos:aws)[SES] in aiPlane
-    service apns(logos:apple)[APNs] in aiPlane
+    subgraph MONEY["Payments"]
+        stripe["Stripe + Stripe Connect"]
+    end
 
-    service stripe(logos:stripe)[Stripe Connect] in money
+    ios --> cf
+    web --> cf
+    r53 --> cf
+    acm --> cf
+    cf --> amp
+    amp --> sbauth
+    sbauth --> sbfn
+    sbfn --> pg
+    sbfn --> sbstor
+    pg -.-> rpc
+    sbfn --> bedrock
+    sbfn --> ses
+    sbfn --> apns
+    sbfn --> stripe
+    pg -.-> sbrt
+    sbrt -.-> web
+    sbrt -.-> ios
 
-    iphone:R --> L:cf
-    browser:R --> L:cf
-    r53:B --> T:cf
-    acm:B --> T:cf
-    cf:R --> L:amplify
-    amplify:R --> L:sbauth
-    sbauth:R --> L:sbfn
-    sbfn:B --> T:pg
-    sbfn:R --> L:bedrock
-    sbfn:R --> L:ses
-    sbfn:R --> L:apns
-    sbfn:R --> L:stripe
-    pg:R --> L:rpc
-    pg:T --> B:sbrt
-    sbrt:L --> R:browser
+    classDef awsClass fill:#FF9900,stroke:#232F3E,color:#000,stroke-width:1.5px
+    classDef sbClass fill:#3ECF8E,stroke:#1F8F5C,color:#000,stroke-width:1.5px
+    classDef stripeClass fill:#635BFF,stroke:#3D2BFF,color:#fff,stroke-width:1.5px
+    classDef appleClass fill:#1d1d1f,stroke:#000,color:#fff,stroke-width:1.5px
+    classDef pgClass fill:#336791,stroke:#1F4060,color:#fff,stroke-width:1.5px
+
+    class r53,acm,cf,amp,bedrock,ses awsClass
+    class sbauth,sbfn,sbstor,sbrt sbClass
+    class stripe stripeClass
+    class apns,ios appleClass
+    class pg,rpc pgClass
 ```
 
-> AWS Architecture Icons reference: the official set (PNG + SVG) is distributed by AWS at <https://aws.amazon.com/architecture/icons/>. Mermaid `architecture-beta` uses the iconify mirror for inline rendering.
+> **Want the hero-grade version with real AWS icons?** GitHub's Mermaid renderer doesn't load external icon registries (iconify, simple-icons). For a publish-quality architecture diagram with the official AWS Architecture Icons, build it once in [Excalidraw](https://excalidraw.com) (has an AWS icon library plugin) or [draw.io](https://app.diagrams.net) (full AWS shape stencil under "More Shapes → Networking → AWS"), export to PNG/SVG, and reference it inline:
+>
+> ```markdown
+> ![AWS architecture](screenshots/arch-hero.png)
+> ```
+>
+> Source set: <https://aws.amazon.com/architecture/icons/>
 
 ### Service roles
 
@@ -227,7 +257,7 @@ sequenceDiagram
 - **Staff bypass** (admin/coach) is evaluated server-side inside the function, not client-side — impossible to forge from the browser.
 - **Structured output contract.** The system prompt defines a strict JSON schema with MLB biomechanical benchmarks baked in. The function parses and normalizes before persisting. If Bedrock returns malformed JSON, we return a 500 and do not update the clip — the credit decrement is the only side effect, and that's acceptable because Bedrock was billed.
 
-Source: `supabase/functions/analyze-swing/index.ts`, `src/plugins/PoseDetector.ts`, `ios/App/App/PoseDetectorPlugin.swift`.
+Source: [supabase/functions/analyze-swing/index.ts](../../supabase/functions/analyze-swing/index.ts), [src/plugins/PoseDetector.ts](../../src/plugins/PoseDetector.ts), [ios/App/App/PoseDetectorPlugin.swift](../../ios/App/App/PoseDetectorPlugin.swift).
 
 ---
 
@@ -285,7 +315,7 @@ sequenceDiagram
 - **Payout is a scheduled job, not a per-session operation.** `pg_cron` runs `process-coach-payouts` weekly and aggregates all confirmed sessions without a `stripe_transfer_id`. This keeps Stripe API calls bounded and makes the operation idempotent — if a run partially fails, the next run picks up the rest.
 - **Mutual confirmation is the payout trigger.** A coach saying "I showed up" is not enough; the player must also confirm. This is a fraud guard and a dispute-avoidance mechanism.
 
-Source: `supabase/functions/create-booking/index.ts`, `supabase/functions/stripe-webhook/index.ts`, `supabase/functions/coach-weekly-payout/index.ts`, `supabase/functions/process-coach-payouts/index.ts`.
+Source: [supabase/functions/create-booking/index.ts](../../supabase/functions/create-booking/index.ts), [supabase/functions/stripe-webhook/index.ts](../../supabase/functions/stripe-webhook/index.ts), [supabase/functions/coach-weekly-payout/index.ts](../../supabase/functions/coach-weekly-payout/index.ts), [supabase/functions/process-coach-payouts/index.ts](../../supabase/functions/process-coach-payouts/index.ts).
 
 ---
 
@@ -322,7 +352,7 @@ flowchart TB
 - **Delete-then-insert on token rotation.** APNs tokens are opaque; storing the most recent for a user and blowing away the old is simpler and safer than upsert-by-token.
 - **Fan-out is fire-and-forget from the app's perspective.** The calling edge function awaits `Promise.allSettled` — one channel's failure does not block the others.
 
-Source: `supabase/functions/send-push/index.ts`, `supabase/functions/send-email/index.ts`, `src/hooks/usePushNotifications.ts`, `src/components/community/NotificationBell.tsx`.
+Source: [supabase/functions/send-push/index.ts](../../supabase/functions/send-push/index.ts), [supabase/functions/send-email/index.ts](../../supabase/functions/send-email/index.ts), [src/hooks/usePushNotifications.ts](../../src/hooks/usePushNotifications.ts), [src/components/community/NotificationBell.tsx](../../src/components/community/NotificationBell.tsx).
 
 ---
 
@@ -423,7 +453,7 @@ flowchart LR
 | Sentry | free tier |
 | **Baseline** | **~$75–130/mo** |
 
-### Phase 2 migration (500–5000 MAU, planned in [AWS-DEPLOYMENT-PLAN.md](AWS-DEPLOYMENT-PLAN.md))
+### Phase 2 migration (500–5000 MAU, planned in [AWS-DEPLOYMENT-PLAN.md](../AWS-DEPLOYMENT-PLAN.md))
 
 - Edge Functions → AWS Lambda behind API Gateway (keeps Deno runtime via `lambda-runtime-deno`)
 - Postgres → Aurora PostgreSQL Serverless v2 with DMS cutover
@@ -449,7 +479,7 @@ Migration order is deliberate: frontend first (free), then auth (the riskiest cu
 
 - **Sentry** captures browser + edge-function errors; source maps uploaded in CI.
 - **Postgres `health` edge function** returns JSON health of DB, SES reachability, Bedrock reachability — used by uptime pings.
-- **`AdminLaunchReadiness` dashboard** (`src/pages/AdminLaunchReadiness.tsx`) runs 13 automated checks in-app: coach onboarded, Stripe transfer happened, mutual confirm happened, GPS captured, rating captured, partner applications, push tokens, pg_cron jobs running, orphan bookings, pending earnings age. Single pane of glass before a launch event.
+- **`AdminLaunchReadiness` dashboard** ([src/pages/AdminLaunchReadiness.tsx](../../src/pages/AdminLaunchReadiness.tsx)) runs 13 automated checks in-app: coach onboarded, Stripe transfer happened, mutual confirm happened, GPS captured, rating captured, partner applications, push tokens, pg_cron jobs running, orphan bookings, pending earnings age. Single pane of glass before a launch event.
 - **pg_cron visibility** is queryable — the launch-readiness dashboard surfaces last-run timestamps for every scheduled job.
 - **Stripe reconciliation** runs daily and alerts admins via the `admin-email-alerts` function if platform balance drifts from expected.
 
@@ -460,4 +490,4 @@ Migration order is deliberate: frontend first (free), then auth (the riskiest cu
 - [ENGINEERING-DECISIONS.md](ENGINEERING-DECISIONS.md) — ADRs behind these choices
 - [BUILD-TIMELINE.md](BUILD-TIMELINE.md) — how the architecture evolved
 - [INTERVIEW-GUIDE.md](INTERVIEW-GUIDE.md) — how to talk through this in an interview
-- [AWS-DEPLOYMENT-PLAN.md](AWS-DEPLOYMENT-PLAN.md) — phased migration plan to AWS-native
+- [AWS-DEPLOYMENT-PLAN.md](../AWS-DEPLOYMENT-PLAN.md) — phased migration plan to AWS-native
