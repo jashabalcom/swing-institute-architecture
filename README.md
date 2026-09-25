@@ -4,7 +4,7 @@
 
 [![Live](https://img.shields.io/badge/live-swinginstitutebaseball.com-1B2A4A?style=for-the-badge)](https://www.swinginstitutebaseball.com)
 [![iOS](https://img.shields.io/badge/iOS_App_Store-Capacitor%208-7EC8E3?style=for-the-badge&logo=apple)](https://www.apple.com/ios/)
-[![Backend](https://img.shields.io/badge/backend-Supabase%20%7C%20101%20edge%20fns-3ECF8E?style=for-the-badge&logo=supabase)](https://supabase.com)
+[![Backend](https://img.shields.io/badge/backend-Supabase%20%7C%20115%20edge%20fns-3ECF8E?style=for-the-badge&logo=supabase)](https://supabase.com)
 [![AI](https://img.shields.io/badge/AI-AWS%20Bedrock%20%7C%20Claude%20Sonnet%204-FF9900?style=for-the-badge&logo=amazonaws)](https://aws.amazon.com/bedrock/)
 [![Payments](https://img.shields.io/badge/payments-Stripe%20Connect-635BFF?style=for-the-badge&logo=stripe)](https://stripe.com/connect)
 
@@ -73,13 +73,13 @@ flowchart LR
 
     subgraph SUPABASE["Supabase Control Plane"]
         auth["Auth (JWT)"]
-        fns["101 Deno Edge Functions"]
+        fns["115 Deno Edge Functions"]
         storage["Storage Buckets"]
         rt["Realtime"]
     end
 
     subgraph DATA["Data Layer"]
-        pg[("Postgres 15<br/>RLS, 296 migrations")]
+        pg[("Postgres 15<br/>RLS, 408 migrations")]
         rpc[/"Atomic RPCs<br/>credit decrement"/]
     end
 
@@ -178,7 +178,7 @@ Total infra: **~$100/month at <500 MAU.** Documented AWS-native migration path (
 
 **Mobile** — Capacitor 8, native Swift plugins (Apple Vision pose detection, Sign in with Apple), APNs push, Capacitor Preferences bridge for auth storage.
 
-**Backend** — Supabase Postgres (296 migrations, Row-Level Security), 101 Deno Edge Functions, Supabase Storage (video buckets, partner-application bucket with 100 MB limit), Realtime for notifications and presence.
+**Backend** — Supabase Postgres (408 migrations, Row-Level Security), 115 Deno Edge Functions, Supabase Storage (video buckets, partner-application bucket with 100 MB limit), Realtime for notifications and presence.
 
 **AI / ML** — AWS Bedrock (Claude Sonnet 4 vision) via `aws4fetch` SIG V4 signing, MediaPipe Tasks Vision (web), Apple `VNDetectHumanBodyPoseRequest` (iOS native), MediaPipe-compatible coordinate-space adapter so both paths feed the same downstream code.
 
@@ -202,19 +202,19 @@ Total infra: **~$100/month at <500 MAU.** Documented AWS-native migration path (
 
 ## Repository stats
 
-Measured 2026-08-31. Each figure is a command you can re-run — see [ARCHITECTURE.md §0](ARCHITECTURE.md#0-system-scale).
+A snapshot as of **2026-09-25**, not a live figure — see [ARCHITECTURE.md §0](ARCHITECTURE.md#0-system-scale) for why the precision is not to be trusted.
 
 | Metric | Count |
 |---|---|
-| Git commits (main) | **1,715** |
-| Development span | **2026-04-04 → 2026-08-22** |
-| React pages (route entry points) | **181** |
-| — of which admin pages | **40** |
-| React components | **454** |
-| Custom React hooks | **76** |
-| Edge functions (Deno) | **101** |
-| Postgres migrations | **296** |
-| Test files | **233** |
+| Git commits (main) | **1,888** |
+| Development span | **2026-04-04 → 2026-09-25** |
+| React pages (route entry points) | **200** |
+| — of which admin pages | **44** |
+| React components | **549** |
+| Custom React hooks | **95** |
+| Edge functions (Deno) | **115** |
+| Postgres migrations | **408** |
+| Test files | **484** |
 | Email templates | **80+** |
 
 ---

@@ -305,7 +305,7 @@ Either you got the credit (row returned) or you didn't. No TOCTOU window.
 
 ## ADR-016 — Ratchet-based quality gates instead of hard thresholds
 
-**Context.** The codebase carries real type and lint debt: 167 tsc errors under `tsconfig.app.json` and 118 eslint errors by the ratchet's count. A conventional CI gate has two options and both are bad. `--max-warnings 0` is permanently red, and a permanently red gate is one the team learns to ignore — strictly worse than no gate. No gate at all lets the debt compound silently.
+**Context.** The codebase carries real type and lint debt — a three-figure error count under `tsconfig.app.json`, and another by eslint's ratchet count. A conventional CI gate has two options and both are bad. `--max-warnings 0` is permanently red, and a permanently red gate is one the team learns to ignore — strictly worse than no gate. No gate at all lets the debt compound silently.
 
 **Decision.** Gate on the *derivative*, not the *value*. `scripts/tsc-ratchet.mjs` and `scripts/eslint-ratchet.mjs` compare the current error count against a committed baseline (`.tsc-baseline`, `.eslint-baseline`) and fail only if it increased. The baseline can only move down; when a change lowers it, the ratchet rewrites the file and it lands in the diff.
 
@@ -317,7 +317,7 @@ Either you got the credit (row returned) or you didn't. No TOCTOU window.
 **Trade-offs accepted.**
 - **Pro:** always green on a clean change, always red on a regression. That is precisely the signal a gate should carry, from day one, with existing debt intact.
 - **Pro:** improvement is visible and irreversible — a lowered baseline is a committed file, so the ratchet cannot silently slip back.
-- **Con:** the existing 285 errors are not fixed, just fenced. Honest framing: this bounds the debt, it does not repay it.
+- **Con:** the existing errors are not fixed, just fenced. Honest framing: this bounds the debt, it does not repay it.
 - **Con:** the number is only meaningful against a pinned dependency tree — see ADR-017, which exists entirely because of a way this can produce a false reading.
 
 **Status.** Accepted. Both ratchets are blocking on PRs and pushes.
@@ -430,7 +430,7 @@ The two Supabase versions expose different `SupabaseClient` generics. A `tsc` ru
 - `process-account-deletions` carries a **coverage ratchet** — a migration-enforced check that fails if a new table holding user data escapes the deletion path.
 
 **Alternatives considered.**
-1. **Age gate in the UI only.** Bypassable, and the audit found exactly this: a 10-year-old who closed the parent-email step retained full access.
+1. **Age gate in the UI only.** Bypassable, and the audit found exactly this: abandoning the parental-consent step left the account fully usable.
 2. **Public bucket + unguessable URLs.** Security by obscurity over minors' video. Not defensible to a reviewer or a parent.
 3. **Adults-only ToS.** Contradicts the actual product.
 
@@ -468,7 +468,7 @@ The two Supabase versions expose different `SupabaseClient` generics. A `tsc` ru
 
 ## Superseded / amended
 
-**ADR-012 (TypeScript loose strict mode)** — still accepted, but the "we'll tighten it post-launch" plan now has teeth it lacked when written. The debt is measured (167 tsc / 118 eslint) and fenced by ratchets (ADR-016) rather than tracked by intention. Tightening lowers a committed number; drifting fails CI. That is the difference between a plan and a mechanism.
+**ADR-012 (TypeScript loose strict mode)** — still accepted, but the "we'll tighten it post-launch" plan now has teeth it lacked when written. The debt is measured by the ratchets and fenced by them (ADR-016) rather than tracked by intention. Tightening lowers a committed number; drifting fails CI. That is the difference between a plan and a mechanism.
 
 ---
 

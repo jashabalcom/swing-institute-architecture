@@ -1,6 +1,6 @@
 # Build Timeline — Stage by Stage
 
-> What shipped, in roughly the order it shipped, with the reasoning behind each stage. Sourced from **1,715 commits** on `main`, spanning **2026-04-04 → 2026-08-22**.
+> What shipped, in roughly the order it shipped, with the reasoning behind each stage. Sourced from the full history of `main`, which begins in April 2026.
 
 This is not a changelog. It's a product-and-architecture narrative — what problem was being solved at each stage and what decision followed.
 
@@ -343,11 +343,11 @@ This is not a changelog. It's a product-and-architecture narrative — what prob
 
 **Result.** 89 findings raised, **36 confirmed**, **14 actively refuted** — a 16% refutation rate. Two agents died on an expired OAuth token, so 5 funnel findings were never verified and are labeled *raised*, not *confirmed*. 16 findings closed within the first day.
 
-**The blocker.** A small number of `SECURITY DEFINER` credit RPCs were reachable by the anonymous role. The guard pattern short-circuits on a NULL uid by design — safe only because that role is revoked at the grant level, which these had never received. Closed before launch and verified at the privilege level afterward. See [ADR-018](ENGINEERING-DECISIONS.md#adr-018--grant-level-lockdown-as-a-distinct-security-layer-above-rls). *(Specifics are held in the private repo.)*
+**The blocker.** A small number of `SECURITY DEFINER` credit RPCs were reachable by the anonymous role. The guard pattern short-circuits on a NULL uid by design — safe only because that role is revoked at the grant level, which these had never received. Closed before launch and verified at the privilege level afterward. *(Specifics are held in the private repo.)* See [ADR-018](ENGINEERING-DECISIONS.md#adr-018--grant-level-lockdown-as-a-distinct-security-layer-above-rls).
 
 **The two-stage fix.** Any authenticated user could read every column of every profile, including minors' legal names and parent contact details. Revoking the grant outright breaks login for 54 frontend read sites, so it shipped in two stages — migrate the reads onto a narrowed `member_directory` view first, revoke only once that build was live ([ADR-019](ENGINEERING-DECISIONS.md#adr-019--two-stage-rollout-for-permission-narrowing-migrations)).
 
-**Also closed.** COPPA age-gate bypass (a 10-year-old who closed the parent-email step kept full access); ad pixels firing on under-13 sessions; two open-redirect gaps; account deletion that deleted nothing; a refunded lesson cancelling the member's whole subscription; a failed booking that ate the credit.
+**Also closed.** A COPPA age-gate bypass in the parental-consent step; ad pixels firing on under-13 sessions; two open-redirect gaps; account deletion that deleted nothing; a refunded lesson cancelling the member's whole subscription; a failed booking that ate the credit.
 
 **App Store compliance.** Guideline 3.1.1 anti-steering (no subscription price on native), Academy gated behind coming-soon, Sentry stopped recording minors, report + block mounted on every UGC surface.
 
@@ -357,7 +357,7 @@ This is not a changelog. It's a product-and-architecture narrative — what prob
 
 ## Cross-cutting patterns observed across stages
 
-Looking across 1,715 commits, certain patterns repeat:
+Looking across the whole history, certain patterns repeat:
 
 1. **Plan-first cadence.** Design specs and implementation plans land in `docs/` before the feature ships. See `docs/NEXT-SESSION-*.md`, `docs/PARENT-VIEW-SPEC.md`, `docs/DASHBOARD-ACADEMY-UPGRADE-SPEC.md`.
 2. **Merge commits mark phase gates.** Every meaningful phase ends with a `Merge feat/*` commit, giving clean rollback points.
@@ -370,6 +370,6 @@ Looking across 1,715 commits, certain patterns repeat:
 
 ## Reading this timeline
 
-- **Volume is not the point; the sequence is.** 1,715 commits across 20+ stages follow one repeating shape: plan → build → harden → protect.
+- **Volume is not the point; the sequence is.** Every stage follows one repeating shape: plan → build → harden → protect.
 - **Each stage solves a concrete business problem.** Stages 5–6 ship an AI surface because users need instant feedback; stage 9 ships Stripe Connect because coaches need to get paid; stage 20 hardens security because an audit proved it was needed.
 - **The reasoning lives next door.** See [ARCHITECTURE.md](ARCHITECTURE.md) for how each stage's pieces fit together, and [ENGINEERING-DECISIONS.md](ENGINEERING-DECISIONS.md) for why each choice was made over its alternatives.

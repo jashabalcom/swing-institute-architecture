@@ -23,22 +23,31 @@
 
 ## 0. System scale
 
-| Metric | Count | How to verify |
-|---|---:|---|
-| Commits on `main` | **1,715** | `git rev-list --count origin/main` |
-| Non-merge commits | **1,532** | `git rev-list --count --no-merges origin/main` |
-| Development span | **2026-04-04 → 2026-08-22** | first/last commit dates |
-| Deno edge functions | **101** | `ls supabase/functions` minus `_shared` + `tests` |
-| Postgres migrations | **296** | `ls supabase/migrations \| wc -l` |
-| React route pages | **181** | `ls src/pages/*.tsx \| wc -l` |
-| — of which admin pages | **40** | `ls src/pages \| grep -c '^Admin'` |
-| React components | **454** | `find src/components -name '*.tsx' \| wc -l` |
-| Custom hooks | **76** | `ls src/hooks/*.ts*` |
-| Frontend TS/TSX | **~248k LOC** | `find src -name '*.ts*' \| xargs wc -l` |
-| Edge-function TS | **~45k LOC** | `find supabase/functions -name '*.ts' \| xargs wc -l` |
-| Test files | **233** | `find src tests supabase -name '*.test.ts*'` |
+**A snapshot, not a live figure.** This is a documentation mirror with no checkout behind it,
+so the numbers are written out — dated, because they move faster than this page does.
 
-> **Why this table exists.** An earlier revision of these docs quoted 35 edge functions, 89 migrations, and 87 pages — accurate when written, off by 2–3x four months later. Counts in documentation decay silently, and a wrong number is worse than a missing one because it is quoted with confidence. Every figure here is a command you can re-run.
+| Metric | As of 2026-09-25 |
+|---|---:|
+| Commits on `main` | **1,888** |
+| Non-merge commits | **1,681** |
+| Development span | **2026-04-04 → 2026-09-25** |
+| Deno edge functions | **115** |
+| Postgres migrations | **408** |
+| React route pages | **200** |
+| — of which admin pages | **44** |
+| React components | **549** |
+| Custom hooks | **95** |
+| Test files | **484** |
+
+> **Read these as orders of magnitude.** An earlier revision of this page quoted 35 edge
+> functions and 89 migrations — right when written, off by 2–3× four months later. The
+> revision after that paired each count with the command producing it; twenty-five days on,
+> every one of those figures had moved again (edge functions 101 → 115, migrations 296 → 408).
+>
+> In the application repo the rule is now that a drifting number is not written down at all —
+> only the command that prints it, enforced by a blocking CI gate. That rule cannot apply here,
+> because this repo holds documentation and no code to run commands against. The honest
+> substitute is a date on the table and this paragraph telling you to distrust the precision.
 
 ---
 
@@ -56,7 +65,7 @@
 - Single TypeScript codebase, no native rewrite.
 - < $250/mo infra at launch scale (< 500 MAU), predictable growth curve.
 - Defense-in-depth: RLS + JWT + ownership checks + atomic RPCs + grant-level lockdown.
-- Zero-downtime schema evolution (296 forward-only migrations).
+- Zero-downtime schema evolution: forward-only migrations, never edited after apply.
 - Minimum-vendor surface: Supabase for OLTP + auth, AWS for heavy lifting (Bedrock, SES, CloudFront/Amplify, APNs), Stripe for money movement.
 - COPPA-safe by construction: the platform knowingly serves minors, so age gating, private media, and parental consent are architectural constraints rather than features.
 
@@ -77,11 +86,11 @@ flowchart LR
     end
 
     subgraph edge[Edge tier]
-      fns[101 Deno Edge Functions<br/>Supabase runtime]
+      fns[Deno Edge Functions<br/>Supabase runtime]
     end
 
     subgraph data[Data tier]
-      pg[(Postgres<br/>296 migrations<br/>RLS)]
+      pg[(Postgres<br/>forward-only migrations<br/>RLS)]
       stor[(Object Storage<br/>video clips,<br/>avatars, applications)]
       rt[[Realtime]]
     end
@@ -155,14 +164,14 @@ flowchart TB
     subgraph SUPABASE["Supabase Control Plane"]
         direction LR
         sbauth["Auth (JWT)"]
-        sbfn["101 Deno Edge Functions"]
+        sbfn["Deno Edge Functions"]
         sbstor["Storage Buckets"]
         sbrt["Realtime"]
     end
 
     subgraph DATA["Data Plane"]
         direction LR
-        pg[("Postgres 15<br/>RLS, 296 migrations")]
+        pg[("Postgres 15<br/>RLS, forward-only migrations")]
         rpc[/"Atomic RPCs"/]
     end
 
@@ -225,7 +234,7 @@ flowchart TB
 | Hosting | AWS Amplify | CI/CD from GitHub → S3 behind CloudFront, preview branches |
 | Auth | Supabase Auth | JWT issuance, refresh rotation, email + Apple SSO |
 | API | Supabase Edge Functions (Deno) | All server-side logic, 35 functions |
-| OLTP | Supabase Postgres | 296 migrations, RLS everywhere, pg_cron for scheduled jobs |
+| OLTP | Supabase Postgres | Forward-only migrations, RLS everywhere, pg_cron for scheduled jobs |
 | Realtime | Supabase Realtime | Push DB changes to subscribed clients (notifications, presence) |
 | Object storage | Supabase Storage | Video clips, avatars, partner-application intro videos (100 MB cap) |
 | AI inference | AWS Bedrock | Claude Sonnet 4 vision, via `aws4fetch` SIG V4 signing |
@@ -242,7 +251,7 @@ flowchart TB
 
 ### Subsystem map
 
-The platform is larger than the hero AI path. The 101 edge functions cluster into eight subsystems:
+The platform is larger than the hero AI path. The edge functions cluster into eight subsystems (counts below are shape, not inventory — run the command in §0 for the current total):
 
 | Subsystem | Functions | What it owns |
 |---|---:|---|
@@ -594,9 +603,9 @@ CI is `.github/workflows/deploy.yml`. Two jobs: `quality` (runs on PRs *and* pus
 
 | Gate | Command | Notes |
 |---|---|---|
-| Types | `node scripts/tsc-ratchet.mjs` | Baseline **167** in `.tsc-baseline` |
-| Lint | `node scripts/eslint-ratchet.mjs` | Baseline **118** |
-| Frontend tests | `npm test` (vitest) | ~1,850 tests; no `continue-on-error` |
+| Types | `node scripts/tsc-ratchet.mjs` | Baseline lives in `.tsc-baseline`; the script prints it |
+| Lint | `node scripts/eslint-ratchet.mjs` | Baseline lives in `.eslint-baseline`; the script prints it |
+| Frontend tests | `npm test` (vitest) | No `continue-on-error` — a red test blocks the merge |
 | Edge types | `deno check` on `_shared/*.ts` | Type-checks clean today, so it is a real gate |
 | Edge tests | `deno test` on `_shared` + `analyze-swing` | Runs with `--allow-env` (cors.ts reads env at module load) |
 | Deploy drift | push-only, report-only | |
@@ -607,7 +616,7 @@ Playwright E2E is `continue-on-error` and gates nothing. Stated plainly because 
 
 The raw tools are not the gate. `scripts/tsc-ratchet.mjs` and `scripts/eslint-ratchet.mjs` fail only when the error count **increases** past a committed baseline, and the baseline can only move down.
 
-**Why.** The codebase carries real type and lint debt (167 and 118 respectively). A hard `--max-warnings 0` gate would be permanently red, and a permanently red gate is one everyone learns to ignore — the worst possible state. A ratchet is always green on a clean change and always red on a regression, which is exactly the signal a gate should carry. Paying down debt lowers the baseline; the file is committed, so improvement is visible in the diff.
+**Why.** The codebase carries real type and lint debt. A hard `--max-warnings 0` gate would be permanently red, and a permanently red gate is one everyone learns to ignore — the worst possible state. A ratchet is always green on a clean change and always red on a regression, which is exactly the signal a gate should carry. Paying down debt lowers the baseline; the file is committed, so improvement is visible in the diff.
 
 Two traps worth knowing, both documented in `CLAUDE.md`:
 
