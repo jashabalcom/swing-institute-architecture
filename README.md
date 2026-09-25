@@ -1,14 +1,16 @@
 # Swing Institute — Architecture Reference
 
-> Production athlete-development SaaS. Web, iOS App Store, and PWA from a single TypeScript codebase, with an AWS Bedrock vision pipeline (Claude Sonnet 4) that returns biomechanical scorecards from a phone-recorded swing in about eight seconds. Coaching marketplace with Stripe Connect Express payouts. Live with MLB players, college athletes, and youth prospects.
+> Production athlete-development SaaS. Web, iOS App Store, and PWA from a single TypeScript codebase, with an AWS Bedrock vision pipeline (Claude Sonnet 4) that returns biomechanical scorecards from a phone-recorded swing in about eight seconds. Coaching marketplace with Stripe Connect Express payouts. Built for youth, high-school, collegiate, and professional hitters.
 
 [![Live](https://img.shields.io/badge/live-swinginstitutebaseball.com-1B2A4A?style=for-the-badge)](https://www.swinginstitutebaseball.com)
 [![iOS](https://img.shields.io/badge/iOS_App_Store-Capacitor%208-7EC8E3?style=for-the-badge&logo=apple)](https://www.apple.com/ios/)
-[![Backend](https://img.shields.io/badge/backend-Supabase%20%7C%2035%20edge%20fns-3ECF8E?style=for-the-badge&logo=supabase)](https://supabase.com)
+[![Backend](https://img.shields.io/badge/backend-Supabase%20%7C%20115%20edge%20fns-3ECF8E?style=for-the-badge&logo=supabase)](https://supabase.com)
 [![AI](https://img.shields.io/badge/AI-AWS%20Bedrock%20%7C%20Claude%20Sonnet%204-FF9900?style=for-the-badge&logo=amazonaws)](https://aws.amazon.com/bedrock/)
 [![Payments](https://img.shields.io/badge/payments-Stripe%20Connect-635BFF?style=for-the-badge&logo=stripe)](https://stripe.com/connect)
 
-This repository is the public architecture reference for Swing Institute. The application code lives in a private repo. The intent here is to give engineers, architects, and hiring managers a clear read on the system design, the decisions behind it, and the build history without needing source access.
+This repository is the public architecture reference for Swing Institute. The application code lives in a private repo. The intent is to document the system design, the decisions behind it, and the build history without requiring source access.
+
+> **Status: pre-launch.** The platform is built and deployed across web and iOS, with ~0 real members, currently in security and reliability hardening ahead of public launch.
 
 ---
 
@@ -24,19 +26,6 @@ This repository is the public architecture reference for Swing Institute. The ap
 | Operations | A custom launch-readiness dashboard with 13 automated checks as a single pane of glass. |
 | Migration plan | Phased path to AWS-native: frontend, then auth (Cognito), then data (Aurora Serverless v2 via AWS DMS logical replication), then functions (Lambda + API Gateway HTTP v2). |
 | Related work | A second production SaaS, [Terrava](https://github.com/jashabalcom/terrava-architecture), runs the AWS-native CDK stack already (14 stacks, 77 Lambda functions, Bedrock RAG). |
-
----
-
-<p align="center">
-  <img src="docs/PORTFOLIO/screenshots/01-dashboard-hero.png" alt="Athlete dashboard" width="32%" />
-  <img src="docs/PORTFOLIO/screenshots/02-swing-vault.png" alt="Swing Vault with AI scores" width="32%" />
-  <img src="docs/PORTFOLIO/screenshots/05-admin-launch-readiness.png" alt="Admin launch readiness dashboard" width="32%" />
-</p>
-<p align="center">
-  <img src="docs/PORTFOLIO/screenshots/06-pricing-v2.png" alt="Pricing V2" width="32%" />
-  <img src="docs/PORTFOLIO/screenshots/04-coach-dashboard.png" alt="Coach dashboard" width="32%" />
-  <img src="docs/PORTFOLIO/screenshots/10-home-landing.png" alt="Home landing" width="32%" />
-</p>
 
 ---
 
@@ -84,13 +73,13 @@ flowchart LR
 
     subgraph SUPABASE["Supabase Control Plane"]
         auth["Auth (JWT)"]
-        fns["35 Deno Edge Functions"]
+        fns["115 Deno Edge Functions"]
         storage["Storage Buckets"]
         rt["Realtime"]
     end
 
     subgraph DATA["Data Layer"]
-        pg[("Postgres 15<br/>RLS, 89 migrations")]
+        pg[("Postgres 15<br/>RLS, 408 migrations")]
         rpc[/"Atomic RPCs<br/>credit decrement"/]
     end
 
@@ -130,7 +119,7 @@ flowchart LR
     class pg,rpc pg
 ```
 
-**Full architecture deep-dive (with sequence flows + ERD):** [docs/PORTFOLIO/ARCHITECTURE.md](docs/PORTFOLIO/ARCHITECTURE.md)
+**Full architecture deep-dive (with sequence flows + ERD):** [ARCHITECTURE.md](ARCHITECTURE.md)
 
 ---
 
@@ -163,7 +152,7 @@ sequenceDiagram
     Note over E,B: Credits stay decremented if Bedrock fails<br/>Bedrock billed; we accept this as a small loss vs<br/>holding a credit-lock during a 3-8s call.
 ```
 
-> Want a hero-grade static diagram with the official AWS Architecture Icons? Build one in [Excalidraw](https://excalidraw.com) (it has an AWS icon library) or [draw.io](https://app.diagrams.net) (full AWS shape pack), export to PNG/SVG, and reference it as `docs/PORTFOLIO/screenshots/arch-hero.png`. Mermaid renders inline; static art is sharper for the hero.
+> Want a hero-grade static diagram with the official AWS Architecture Icons? Build one in [Excalidraw](https://excalidraw.com) (it has an AWS icon library) or [draw.io](https://app.diagrams.net) (full AWS shape pack), export to PNG/SVG, and reference it as `screenshots/arch-hero.png`. Mermaid renders inline; static art is sharper for the hero.
 
 ---
 
@@ -189,7 +178,7 @@ Total infra: **~$100/month at <500 MAU.** Documented AWS-native migration path (
 
 **Mobile** — Capacitor 8, native Swift plugins (Apple Vision pose detection, Sign in with Apple), APNs push, Capacitor Preferences bridge for auth storage.
 
-**Backend** — Supabase Postgres (89 migrations, Row-Level Security), 35 Deno Edge Functions, Supabase Storage (video buckets, partner-application bucket with 100 MB limit), Realtime for notifications and presence.
+**Backend** — Supabase Postgres (408 migrations, Row-Level Security), 115 Deno Edge Functions, Supabase Storage (video buckets, partner-application bucket with 100 MB limit), Realtime for notifications and presence.
 
 **AI / ML** — AWS Bedrock (Claude Sonnet 4 vision) via `aws4fetch` SIG V4 signing, MediaPipe Tasks Vision (web), Apple `VNDetectHumanBodyPoseRequest` (iOS native), MediaPipe-compatible coordinate-space adapter so both paths feed the same downstream code.
 
@@ -213,15 +202,20 @@ Total infra: **~$100/month at <500 MAU.** Documented AWS-native migration path (
 
 ## Repository stats
 
+A snapshot as of **2026-09-25**, not a live figure — see [ARCHITECTURE.md §0](ARCHITECTURE.md#0-system-scale) for why the precision is not to be trusted.
+
 | Metric | Count |
 |---|---|
-| Git commits (main) | **564** |
-| React pages (route entry points) | **87** |
-| Edge functions (Deno) | **35** |
-| Postgres migrations | **89** |
+| Git commits (main) | **1,888** |
+| Development span | **2026-04-04 → 2026-09-25** |
+| React pages (route entry points) | **200** |
+| — of which admin pages | **44** |
+| React components | **549** |
+| Custom React hooks | **95** |
+| Edge functions (Deno) | **115** |
+| Postgres migrations | **408** |
+| Test files | **484** |
 | Email templates | **80+** |
-| Admin dashboards | **20+** |
-| Custom React hooks | **40+** |
 
 ---
 
@@ -252,7 +246,7 @@ Today's infra is ~$100/month at <500 MAU. The plan when scale or compliance forc
 8. **Email** — Already on SES. ✅
 9. **Observability** — Sentry remains; add **CloudWatch Synthetics + X-Ray + Budgets** (mirror of the Terrava pattern).
 
-Detailed plan in [docs/AWS-DEPLOYMENT-PLAN.md](docs/AWS-DEPLOYMENT-PLAN.md). Pattern proven in [Terrava](https://github.com/jashabalcom/terrava-architecture) — 14 CDK stacks already production.
+Detailed plan in [AWS-DEPLOYMENT-PLAN.md](AWS-DEPLOYMENT-PLAN.md). Pattern proven in [Terrava](https://github.com/jashabalcom/terrava-architecture) — 14 CDK stacks already production.
 
 ---
 
@@ -262,17 +256,12 @@ A second production SaaS by the same author. [Terrava](https://github.com/jashab
 
 ---
 
-## Portfolio documentation
+## Documentation
 
-For a senior-engineer / solutions-architect walk-through of this codebase:
-
-- **[ARCHITECTURE.md](docs/PORTFOLIO/ARCHITECTURE.md)** — system design, data flow diagrams, trust boundaries, scalability posture
-- **[ENGINEERING-DECISIONS.md](docs/PORTFOLIO/ENGINEERING-DECISIONS.md)** — ADR-style decision log (pros, cons, alternatives considered)
-- **[BUILD-TIMELINE.md](docs/PORTFOLIO/BUILD-TIMELINE.md)** — stage-by-stage, what shipped when and why
-- **[INTERVIEW-GUIDE.md](docs/PORTFOLIO/INTERVIEW-GUIDE.md)** — how to walk a hiring manager through this project
-- **[SCREENSHOTS.md](docs/PORTFOLIO/SCREENSHOTS.md)** — portfolio shot list
-
-Additional infra planning: [docs/AWS-DEPLOYMENT-PLAN.md](docs/AWS-DEPLOYMENT-PLAN.md).
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** — system design, data-flow diagrams, trust boundaries, scalability posture, CI gates
+- **[ENGINEERING-DECISIONS.md](ENGINEERING-DECISIONS.md)** — ADR log, 22 records (context, decision, alternatives, trade-offs)
+- **[BUILD-TIMELINE.md](BUILD-TIMELINE.md)** — stage-by-stage, what shipped when and why
+- **[AWS-DEPLOYMENT-PLAN.md](AWS-DEPLOYMENT-PLAN.md)** — phased migration plan to AWS-native
 
 ---
 

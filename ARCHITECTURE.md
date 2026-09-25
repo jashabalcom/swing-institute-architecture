@@ -1,9 +1,12 @@
 # Swing Institute — System Architecture
 
-> Deep-dive for engineers, architects, and hiring managers. Everything on this page reflects what is actually deployed today, not a whiteboard future.
+> Technical deep-dive. Everything on this page reflects what is actually deployed today, not a whiteboard future.
+
+**Verified against the codebase on 2026-08-31.** Every count below is measured, not estimated — see [System scale](#0-system-scale) for how each was obtained.
 
 ## Table of contents
 
+0. [System scale](#0-system-scale)
 1. [Context & goals](#1-context--goals)
 2. [Logical architecture](#2-logical-architecture)
 3. [Physical architecture (AWS + Supabase)](#3-physical-architecture-aws--supabase)
@@ -14,6 +17,37 @@
 8. [Trust boundaries & security](#8-trust-boundaries--security)
 9. [Scalability & cost posture](#9-scalability--cost-posture)
 10. [Observability](#10-observability)
+11. [Quality gates & CI](#11-quality-gates--ci)
+
+---
+
+## 0. System scale
+
+**A snapshot, not a live figure.** This is a documentation mirror with no checkout behind it,
+so the numbers are written out — dated, because they move faster than this page does.
+
+| Metric | As of 2026-09-25 |
+|---|---:|
+| Commits on `main` | **1,888** |
+| Non-merge commits | **1,681** |
+| Development span | **2026-04-04 → 2026-09-25** |
+| Deno edge functions | **115** |
+| Postgres migrations | **408** |
+| React route pages | **200** |
+| — of which admin pages | **44** |
+| React components | **549** |
+| Custom hooks | **95** |
+| Test files | **484** |
+
+> **Read these as orders of magnitude.** An earlier revision of this page quoted 35 edge
+> functions and 89 migrations — right when written, off by 2–3× four months later. The
+> revision after that paired each count with the command producing it; twenty-five days on,
+> every one of those figures had moved again (edge functions 101 → 115, migrations 296 → 408).
+>
+> In the application repo the rule is now that a drifting number is not written down at all —
+> only the command that prints it, enforced by a blocking CI gate. That rule cannot apply here,
+> because this repo holds documentation and no code to run commands against. The honest
+> substitute is a date on the table and this paragraph telling you to distrust the precision.
 
 ---
 
@@ -30,9 +64,12 @@
 **Non-functional goals:**
 - Single TypeScript codebase, no native rewrite.
 - < $250/mo infra at launch scale (< 500 MAU), predictable growth curve.
-- Defense-in-depth: RLS + JWT + ownership checks + atomic RPCs.
-- Zero-downtime schema evolution (89 forward-only migrations).
+- Defense-in-depth: RLS + JWT + ownership checks + atomic RPCs + grant-level lockdown.
+- Zero-downtime schema evolution: forward-only migrations, never edited after apply.
 - Minimum-vendor surface: Supabase for OLTP + auth, AWS for heavy lifting (Bedrock, SES, CloudFront/Amplify, APNs), Stripe for money movement.
+- COPPA-safe by construction: the platform knowingly serves minors, so age gating, private media, and parental consent are architectural constraints rather than features.
+
+**Stage.** Pre-launch. The platform is built and deployed with ~0 real members, hardening toward public launch. Where this document describes traction, it describes none: the "1,200 athletes" figure in marketing copy is the number Jasha has trained **in person**, not an app-user count (`memory/decisions.md`, 2026-05-30).
 
 ---
 
@@ -49,11 +86,11 @@ flowchart LR
     end
 
     subgraph edge[Edge tier]
-      fns[35 Deno Edge Functions<br/>Supabase runtime]
+      fns[Deno Edge Functions<br/>Supabase runtime]
     end
 
     subgraph data[Data tier]
-      pg[(Postgres<br/>89 migrations<br/>RLS)]
+      pg[(Postgres<br/>forward-only migrations<br/>RLS)]
       stor[(Object Storage<br/>video clips,<br/>avatars, applications)]
       rt[[Realtime]]
     end
@@ -127,14 +164,14 @@ flowchart TB
     subgraph SUPABASE["Supabase Control Plane"]
         direction LR
         sbauth["Auth (JWT)"]
-        sbfn["35 Deno Edge Functions"]
+        sbfn["Deno Edge Functions"]
         sbstor["Storage Buckets"]
         sbrt["Realtime"]
     end
 
     subgraph DATA["Data Plane"]
         direction LR
-        pg[("Postgres 15<br/>RLS, 89 migrations")]
+        pg[("Postgres 15<br/>RLS, forward-only migrations")]
         rpc[/"Atomic RPCs"/]
     end
 
@@ -197,7 +234,7 @@ flowchart TB
 | Hosting | AWS Amplify | CI/CD from GitHub → S3 behind CloudFront, preview branches |
 | Auth | Supabase Auth | JWT issuance, refresh rotation, email + Apple SSO |
 | API | Supabase Edge Functions (Deno) | All server-side logic, 35 functions |
-| OLTP | Supabase Postgres | 89 migrations, RLS everywhere, pg_cron for scheduled jobs |
+| OLTP | Supabase Postgres | Forward-only migrations, RLS everywhere, pg_cron for scheduled jobs |
 | Realtime | Supabase Realtime | Push DB changes to subscribed clients (notifications, presence) |
 | Object storage | Supabase Storage | Video clips, avatars, partner-application intro videos (100 MB cap) |
 | AI inference | AWS Bedrock | Claude Sonnet 4 vision, via `aws4fetch` SIG V4 signing |
@@ -206,7 +243,28 @@ flowchart TB
 | Payments | Stripe + Stripe Connect Express | Checkout, subscriptions, coach payouts |
 | Live video | Daily.co | WebRTC rooms + transcription |
 | CRM | GoHighLevel | Contact sync on signup |
-| Error tracking | Sentry | Browser + edge-function errors |
+| Error tracking | Sentry | Browser + edge-function errors (PII-scrubbed; minors excluded entirely) |
+| Background checks | Checkr | Coach criminal-background screening before marketplace activation |
+| Identity verification | Stripe Identity | Government-ID verification for coaches taking payouts |
+| SMS | AWS SNS | Marketplace transactional SMS (ADR-0001) |
+| Uptime | External dead-man's switch | Fires if the internal canary itself stops reporting |
+
+### Subsystem map
+
+The platform is larger than the hero AI path. The edge functions cluster into eight subsystems (counts below are shape, not inventory — run the command in §0 for the current total):
+
+| Subsystem | Functions | What it owns |
+|---|---:|---|
+| **Marketplace** | ~18 | Coach search, listings, availability, booking requests, acceptance windows, en-route/check-in, disputes, reviews, reputation, lifecycle sweepers |
+| **Money** | ~15 | Checkout, Connect onboarding, webhooks, refunds, payouts, reconciliation (both platform and marketplace), idempotency |
+| **Notifications** | ~10 | Push, email, in-app, waitlist promotion, review-complete, critical alerts |
+| **Swing / AI** | ~8 | Analysis, pose extraction + backfill, thumbnails, session video processing, clip sharing |
+| **Trust & safety** | ~7 | Background checks, identity verification, coach certification, COPPA verification, child accounts, account deletion |
+| **Growth / CRM** | ~10 | GHL sync, lead cadence, affiliate invites, referral credit, city waitlists, unsubscribe |
+| **Scheduled ops** | ~15 | 15+ `pg_cron`-driven sweepers — attendance, SLA, expiry, balance, score-pending, stripe-connect status |
+| **Platform** | ~8 | Health, canary, availability, distance, transcription, Zoom/Daily rooms |
+
+**Why so many sweepers.** Every multi-step business process that can stall — an unaccepted booking request, an unresolved dispute, an expiring credit, a coach who never finished Connect onboarding — has a scheduled function that finds stalled rows and advances or expires them. This is the "no manual queues" goal from the product brief expressed in architecture: the operator gets an alert, not a to-do list.
 
 ---
 
@@ -257,7 +315,7 @@ sequenceDiagram
 - **Staff bypass** (admin/coach) is evaluated server-side inside the function, not client-side — impossible to forge from the browser.
 - **Structured output contract.** The system prompt defines a strict JSON schema with MLB biomechanical benchmarks baked in. The function parses and normalizes before persisting. If Bedrock returns malformed JSON, we return a 500 and do not update the clip — the credit decrement is the only side effect, and that's acceptable because Bedrock was billed.
 
-Source: [supabase/functions/analyze-swing/index.ts](../../supabase/functions/analyze-swing/index.ts), [src/plugins/PoseDetector.ts](../../src/plugins/PoseDetector.ts), [ios/App/App/PoseDetectorPlugin.swift](../../ios/App/App/PoseDetectorPlugin.swift).
+Source: [supabase/functions/analyze-swing/index.ts](https://github.com/jashabalcom/swinginsitute/blob/main/supabase/functions/analyze-swing/index.ts), [src/plugins/PoseDetector.ts](https://github.com/jashabalcom/swinginsitute/blob/main/src/plugins/PoseDetector.ts), [ios/App/App/PoseDetectorPlugin.swift](https://github.com/jashabalcom/swinginsitute/blob/main/ios/App/App/PoseDetectorPlugin.swift).
 
 ---
 
@@ -315,7 +373,7 @@ sequenceDiagram
 - **Payout is a scheduled job, not a per-session operation.** `pg_cron` runs `process-coach-payouts` weekly and aggregates all confirmed sessions without a `stripe_transfer_id`. This keeps Stripe API calls bounded and makes the operation idempotent — if a run partially fails, the next run picks up the rest.
 - **Mutual confirmation is the payout trigger.** A coach saying "I showed up" is not enough; the player must also confirm. This is a fraud guard and a dispute-avoidance mechanism.
 
-Source: [supabase/functions/create-booking/index.ts](../../supabase/functions/create-booking/index.ts), [supabase/functions/stripe-webhook/index.ts](../../supabase/functions/stripe-webhook/index.ts), [supabase/functions/coach-weekly-payout/index.ts](../../supabase/functions/coach-weekly-payout/index.ts), [supabase/functions/process-coach-payouts/index.ts](../../supabase/functions/process-coach-payouts/index.ts).
+Source: [supabase/functions/create-booking/index.ts](https://github.com/jashabalcom/swinginsitute/blob/main/supabase/functions/create-booking/index.ts), [supabase/functions/stripe-webhook/index.ts](https://github.com/jashabalcom/swinginsitute/blob/main/supabase/functions/stripe-webhook/index.ts), [supabase/functions/coach-weekly-payout/index.ts](https://github.com/jashabalcom/swinginsitute/blob/main/supabase/functions/coach-weekly-payout/index.ts), [supabase/functions/process-coach-payouts/index.ts](https://github.com/jashabalcom/swinginsitute/blob/main/supabase/functions/process-coach-payouts/index.ts).
 
 ---
 
@@ -352,7 +410,7 @@ flowchart TB
 - **Delete-then-insert on token rotation.** APNs tokens are opaque; storing the most recent for a user and blowing away the old is simpler and safer than upsert-by-token.
 - **Fan-out is fire-and-forget from the app's perspective.** The calling edge function awaits `Promise.allSettled` — one channel's failure does not block the others.
 
-Source: [supabase/functions/send-push/index.ts](../../supabase/functions/send-push/index.ts), [supabase/functions/send-email/index.ts](../../supabase/functions/send-email/index.ts), [src/hooks/usePushNotifications.ts](../../src/hooks/usePushNotifications.ts), [src/components/community/NotificationBell.tsx](../../src/components/community/NotificationBell.tsx).
+Source: [supabase/functions/send-push/index.ts](https://github.com/jashabalcom/swinginsitute/blob/main/supabase/functions/send-push/index.ts), [supabase/functions/send-email/index.ts](https://github.com/jashabalcom/swinginsitute/blob/main/supabase/functions/send-email/index.ts), [src/hooks/usePushNotifications.ts](https://github.com/jashabalcom/swinginsitute/blob/main/src/hooks/usePushNotifications.ts), [src/components/community/NotificationBell.tsx](https://github.com/jashabalcom/swinginsitute/blob/main/src/components/community/NotificationBell.tsx).
 
 ---
 
@@ -394,6 +452,17 @@ erDiagram
 - **`user_roles` is append-only in practice.** Role escalation goes through admin RPCs, not direct table writes. Players never see their own role row.
 - **`swing_clips.ai_analysis` is JSONB.** The Bedrock output shape evolves quarterly; denormalizing would force a migration each time. Category scores are extracted to typed columns for indexing (`ai_score`, `ai_analyzed_at`).
 - **`session_checkins` stores GPS coords** when available. Not required (virtual sessions have none) but feeds the launch-readiness check for in-person verification.
+- **`business_rules` is a table, not a constants file.** Price floors, referral rates, SLA windows, and canary alert thresholds live in the database so the operator can change them without a deploy. The canary reads from it deliberately — querying a real business rule proves the table *and* its RLS are healthy, not just that Postgres accepts connections.
+- **`member_directory` is a view, not a table.** It is the only sanctioned path for one member to read another's profile fields. The underlying `profiles` table holds minors' legal names, ages, and parent contact details and is no longer broadly selectable.
+
+### Domains added since the first revision of this doc
+
+The ERD above covers the original core. Four domains have since been built out and are worth naming because they carry most of the recent complexity:
+
+- **Marketplace** — listings, availability, booking requests with acceptance windows, en-route/photo check-in, disputes with SLA resolution, reviews, coach reputation, marketplace-specific credits and payment reconciliation. Eleven migrations touch it directly.
+- **Trust & safety** — Checkr background checks, Stripe Identity verification, coach certification, report/block on every UGC surface, DM filtering.
+- **COPPA & family** — age gate, parent-verified child account creation, out-of-band parental consent email, per-minor privacy suppression, and a `process-account-deletions` path with a coverage ratchet so a new table cannot silently escape deletion.
+- **Growth** — referral attribution and commission, affiliate invites, lead cadence automation, per-city waitlists with balance sweeping.
 
 ---
 
@@ -429,12 +498,38 @@ flowchart LR
 
 **Defense in depth:**
 
-1. **Database tier.** RLS policies on every user-scoped table. No table is readable/writable without explicit policy. The service-role key never leaves edge functions.
-2. **Edge tier.** Every sensitive function verifies the incoming JWT with `supabase.auth.getUser(token)`, then re-checks resource ownership (e.g., `swing_clips.user_id = auth.uid()`) before acting. Authorization is never inferred from the client.
-3. **Credit tier.** Any limited resource (AI analyses, hybrid credits, group credits) decrements through an atomic RPC. No read-then-write paths. A user cannot race two concurrent requests into a free analysis.
-4. **Payment tier.** Stripe webhooks verify the signature header before touching the DB. The reconciliation job reruns against Stripe's API to catch silent drops.
-5. **iOS tier.** Native secrets (APNs key, Apple Sign In key) never reach JS; `Capacitor.Preferences` is used instead of `localStorage` on native for encrypted-at-rest session storage.
-6. **Protected surfaces.** `CLAUDE.md` marks notification system, credit RPCs, Stripe webhook, and SES config as change-controlled — they are production-verified and any modification requires explicit re-testing.
+1. **Grant tier.** *(Added Aug 2026.)* RLS is not the outermost layer — Postgres `GRANT`/`REVOKE` is. `SECURITY DEFINER` functions bypass RLS entirely, so every privileged RPC is explicitly revoked from `PUBLIC` and `anon`. See [the anon-executable RPC finding](#the-grant-tier-lesson) below for why this layer earned its place.
+2. **Database tier.** RLS policies on every user-scoped table. No table is readable/writable without explicit policy. The service-role key never leaves edge functions.
+3. **Column tier.** *(Added Aug 2026.)* Table-level `GRANT SELECT` is too coarse for `profiles`, which holds children's legal names, ages, and parent contact details. Cross-user reads now route through a narrowed `member_directory` view; the base table's broad select grant was revoked behind it.
+4. **Edge tier.** Every sensitive function verifies the incoming JWT with `supabase.auth.getUser(token)`, then re-checks resource ownership (e.g., `swing_clips.user_id = auth.uid()`) before acting. Authorization is never inferred from the client.
+5. **Credit tier.** Any limited resource (AI analyses, hybrid credits, group credits, marketplace credits) decrements through an atomic RPC. No read-then-write paths. A user cannot race two concurrent requests into a free analysis.
+6. **Payment tier.** Stripe webhooks verify the signature header before touching the DB. The reconciliation job reruns against Stripe's API to catch silent drops.
+7. **Minor-safety tier.** *(Added 2026.)* The `swing-videos` bucket is private (`public=false`) with storage RLS scoped to owner / parent / assigned coach / admin; reads go through signed URLs. Ad/analytics pixels are suppressed on under-13 sessions, and Sentry does not record minors at all.
+8. **iOS tier.** Native secrets (APNs key, Apple Sign In key) never reach JS; `Capacitor.Preferences` is used instead of `localStorage` on native for encrypted-at-rest session storage.
+9. **Protected surfaces.** `CLAUDE.md` marks the notification system, credit RPCs, Stripe webhook, and SES config as change-controlled — they are production-verified and any modification requires explicit re-testing.
+
+### The grant tier lesson
+
+The 2026-08-15 launch audit surfaced a finding worth generalizing, because it is a *class* of bug rather than a typo. Specifics are held in the private repo; the transferable shape is this:
+
+A `SECURITY DEFINER` function carried an authorization guard that deliberately allows callers with a NULL `auth.uid()` through, so that cron and service-role callers can use it. That pattern is sound **only when the anonymous role is separately revoked at the grant level.** Most functions using it had that revoke. A few, added in later migrations, granted execute to the authenticated role and never revoked the default — and because new public-schema functions are auto-granted to the anonymous role, granting to `authenticated` restricted nothing.
+
+Two properties combined to make it serious: `SECURITY DEFINER` bypasses RLS entirely, so correct table policies were irrelevant; and the anonymous key is, by design, public — it ships in the client bundle. The gap was closed before launch and verified at the privilege level afterward.
+
+**Three architectural lessons, all now encoded in the project's pre-flight checks:**
+
+- **A column-level `REVOKE` is a silent no-op while a table-level `GRANT` stands.** It returns success and changes nothing. Same for functions while `PUBLIC` holds the grant (ACL shows `=X/postgres`). The fix is always: revoke the broad grant, then re-grant the narrow set.
+- **Never trust `{"success": true}` from a migration.** Verify with `has_column_privilege` / `has_function_privilege` *after* applying.
+- **A safe pattern plus an unsafe default is an unsafe pattern.** The guard was fine; the platform's default grant behavior undid it. Defense in depth means the layers cannot assume each other.
+
+### Two-stage rollout for a breaking security fix
+
+Closing the `profiles` read hole was not a single migration, because the obvious version breaks login for every existing session:
+
+- **Stage A** (2026-08-21) — migrate all **54** cross-user profile read sites in the frontend onto `member_directory`, and ship that build. No permission change; nothing breaks.
+- **Stage B** (2026-08-22) — only once the narrowed frontend is live, revoke the broad `profiles` select grant.
+
+Order is load-bearing and is called out in `CLAUDE.md` as the one hard dependency in the audit's fix plan: **the revoke must follow the frontend deploy, or login breaks.** Stage B's migration shipped with a test written to fail if the hole reopens.
 
 ---
 
@@ -453,7 +548,7 @@ flowchart LR
 | Sentry | free tier |
 | **Baseline** | **~$75–130/mo** |
 
-### Phase 2 migration (500–5000 MAU, planned in [AWS-DEPLOYMENT-PLAN.md](../AWS-DEPLOYMENT-PLAN.md))
+### Phase 2 migration (500–5000 MAU, planned in [AWS-DEPLOYMENT-PLAN.md](AWS-DEPLOYMENT-PLAN.md))
 
 - Edge Functions → AWS Lambda behind API Gateway (keeps Deno runtime via `lambda-runtime-deno`)
 - Postgres → Aurora PostgreSQL Serverless v2 with DMS cutover
@@ -479,9 +574,66 @@ Migration order is deliberate: frontend first (free), then auth (the riskiest cu
 
 - **Sentry** captures browser + edge-function errors; source maps uploaded in CI.
 - **Postgres `health` edge function** returns JSON health of DB, SES reachability, Bedrock reachability — used by uptime pings.
-- **`AdminLaunchReadiness` dashboard** ([src/pages/AdminLaunchReadiness.tsx](../../src/pages/AdminLaunchReadiness.tsx)) runs 13 automated checks in-app: coach onboarded, Stripe transfer happened, mutual confirm happened, GPS captured, rating captured, partner applications, push tokens, pg_cron jobs running, orphan bookings, pending earnings age. Single pane of glass before a launch event.
+- **`AdminLaunchReadiness` dashboard** ([src/pages/AdminLaunchReadiness.tsx](https://github.com/jashabalcom/swinginsitute/blob/main/src/pages/AdminLaunchReadiness.tsx)) runs 13 automated checks in-app: coach onboarded, Stripe transfer happened, mutual confirm happened, GPS captured, rating captured, partner applications, push tokens, pg_cron jobs running, orphan bookings, pending earnings age. Single pane of glass before a launch event.
 - **pg_cron visibility** is queryable — the launch-readiness dashboard surfaces last-run timestamps for every scheduled job.
 - **Stripe reconciliation** runs daily and alerts admins via the `admin-email-alerts` function if platform balance drifts from expected.
+
+### Synthetic monitoring: the canary and the dead-man's switch
+
+`canary-runner` executes every 5 minutes via `pg_cron` and times six synthetic checks of the critical paths:
+
+1. `db_reachable` — `SELECT 1`
+2. `business_rules_query` — reads a real business rule, proving the rules table *and* its RLS are intact
+3. `messaging_provider_status` — the provider view is queryable
+4. `attendance_reminder_sweeper` — function responds 2xx
+5. `dispute_sla_resolver` — function responds 2xx
+6. `compute_route_distance` — returns a sane distance for a known ATL route
+
+Results land in `canary_runs`. After N consecutive failures (N is configurable in `business_rules`, not hardcoded) it fires a critical admin alert.
+
+**The interesting part is the layer above it.** A monitor that lives inside the system it monitors cannot report that it is dead. So each canary run also pings an **external dead-man's switch** (`_shared/deadMansSwitch.ts`). If the whole Supabase project goes dark — taking the canary with it — the *absence* of that ping is what pages the operator. This is the difference between monitoring and observability that survives its own failure mode.
+
+---
+
+## 11. Quality gates & CI
+
+CI is `.github/workflows/deploy.yml`. Two jobs: `quality` (runs on PRs *and* pushes to main) and `deploy` (push-only, guarded by `github.event_name` so a PR can never ship to Amplify).
+
+**The gate chain, all blocking:**
+
+| Gate | Command | Notes |
+|---|---|---|
+| Types | `node scripts/tsc-ratchet.mjs` | Baseline lives in `.tsc-baseline`; the script prints it |
+| Lint | `node scripts/eslint-ratchet.mjs` | Baseline lives in `.eslint-baseline`; the script prints it |
+| Frontend tests | `npm test` (vitest) | No `continue-on-error` — a red test blocks the merge |
+| Edge types | `deno check` on `_shared/*.ts` | Type-checks clean today, so it is a real gate |
+| Edge tests | `deno test` on `_shared` + `analyze-swing` | Runs with `--allow-env` (cors.ts reads env at module load) |
+| Deploy drift | push-only, report-only | |
+
+Playwright E2E is `continue-on-error` and gates nothing. Stated plainly because a documented gap is a known risk, while an undocumented one is a surprise during an incident.
+
+### Ratchets, not thresholds
+
+The raw tools are not the gate. `scripts/tsc-ratchet.mjs` and `scripts/eslint-ratchet.mjs` fail only when the error count **increases** past a committed baseline, and the baseline can only move down.
+
+**Why.** The codebase carries real type and lint debt. A hard `--max-warnings 0` gate would be permanently red, and a permanently red gate is one everyone learns to ignore — the worst possible state. A ratchet is always green on a clean change and always red on a regression, which is exactly the signal a gate should carry. Paying down debt lowers the baseline; the file is committed, so improvement is visible in the diff.
+
+Two traps worth knowing, both documented in `CLAUDE.md`:
+
+- **Root `tsc --noEmit` is vacuous.** The root `tsconfig.json` is solution-style with `files: []`. The real check is `tsc -p tsconfig.app.json --noEmit`. A green root run means nothing.
+- **Raw `eslint .` reports ~325 errors** because the ratchet counts a narrower set. Reading the raw number as a regression is a false alarm.
+
+### The CI ordering trap
+
+Step order in the quality job is load-bearing and commented as such in the workflow.
+
+`deno check --node-modules-dir=auto` re-resolves the edge functions' `npm:@supabase/supabase-js@2` specifiers into the **shared** `node_modules`, installing the newest match for the caret range and clobbering what `npm ci` pinned. Observed: `@supabase/supabase-js` 2.90.1 → 2.111.0 and `typescript` 5.8.3 → 5.9.3. The two Supabase versions have different `SupabaseClient` generics, so a `tsc` run afterwards reports errors in `src/` files the diff never touched — the ratchet jumped **169 → 182**, blaming a changeset that added nothing.
+
+Reproduced deterministically: `npm ci` → 169, `deno check` → 182, `npm ci` → 169.
+
+**CI is safe only because every Node/tsc gate runs before every Deno gate.** Reordering reintroduces it, and the failure looks like a real regression, so it costs an afternoon to diagnose. `scripts/tsc-ratchet.mjs` now fails closed on the mismatch and names the fix. The same corruption rewrites `ios/App/CapApp-SPM/Package.swift` to point at `node_modules/.deno/…` paths that exist on no other machine — never commit that file after a Deno run.
+
+> This is the most quietly senior thing in the repo: a build-tooling interaction that produces a *plausible false signal*, diagnosed to root cause, then encoded as a fail-closed check plus a comment in the workflow so the next person cannot lose the same afternoon.
 
 ---
 
@@ -489,5 +641,5 @@ Migration order is deliberate: frontend first (free), then auth (the riskiest cu
 
 - [ENGINEERING-DECISIONS.md](ENGINEERING-DECISIONS.md) — ADRs behind these choices
 - [BUILD-TIMELINE.md](BUILD-TIMELINE.md) — how the architecture evolved
-- [INTERVIEW-GUIDE.md](INTERVIEW-GUIDE.md) — how to talk through this in an interview
-- [AWS-DEPLOYMENT-PLAN.md](../AWS-DEPLOYMENT-PLAN.md) — phased migration plan to AWS-native
+- the internal launch audit (private repo) — the audit behind the security sections above
+- [AWS-DEPLOYMENT-PLAN.md](AWS-DEPLOYMENT-PLAN.md) — phased migration plan to AWS-native

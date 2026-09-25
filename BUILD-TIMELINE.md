@@ -1,6 +1,6 @@
 # Build Timeline — Stage by Stage
 
-> What shipped, in roughly the order it shipped, with the reasoning behind each stage. Sourced from 564 commits on `main`. Use this when walking someone through the project chronologically.
+> What shipped, in roughly the order it shipped, with the reasoning behind each stage. Sourced from the full history of `main`, which begins in April 2026.
 
 This is not a changelog. It's a product-and-architecture narrative — what problem was being solved at each stage and what decision followed.
 
@@ -315,15 +315,61 @@ This is not a changelog. It's a product-and-architecture narrative — what prob
 
 ---
 
+## Stage 19 — Marketplace lifecycle, growth, and CI that actually gates (Aug 2026)
+
+**Goal.** Close the gap between "the feature exists" and "the business process completes without me."
+
+**Shipped.**
+- Marketplace lifecycle: booking-request acceptance windows, auto-cancel on expiry, en-route + photo check-in, dispute SLA resolution, reviews and coach reputation, marketplace-specific payment reconciliation.
+- ~15 `pg_cron` sweepers for every process that can stall ([ADR-022](ENGINEERING-DECISIONS.md#adr-022--sweepers-over-queues-for-stalled-business-processes)).
+- Trust & safety: Checkr background checks, Stripe Identity verification, coach certification, report + block on every UGC surface, DM filtering.
+- Growth: Meta Conversions API, referral attribution and commission, affiliate invites, lead cadence, per-city waitlists.
+- Email v3 redesign (navy + red, Oswald display, one CTA) across the 12 functions that bundle `email-styles.ts`.
+- `canary-runner` — six synthetic checks every 5 minutes, plus an **external dead-man's switch** so the absence of a signal pages the operator when the whole project goes dark.
+
+**The uncomfortable finding.** The 1,849 frontend tests had been running **nowhere** in CI. The quality job went straight from the lint ratchet to the Deno gates, and the only other job was `continue-on-error`. Every vitest file in `src/` was decoration — writing a test proved nothing about a PR. Wiring it in was a two-line change; it was red when it landed.
+
+**Decision.** Gate on ratchets rather than thresholds ([ADR-016](ENGINEERING-DECISIONS.md#adr-016--ratchet-based-quality-gates-instead-of-hard-thresholds)) — a permanently-red gate is one everyone learns to ignore, which is worse than none.
+
+**Commit landmarks.** `fix(ci): the test gate had never actually run, and it was red`, `feat(monitoring): external dead-man's switch on the canary`.
+
+---
+
+## Stage 20 — Launch audit and the security hardening it forced (Aug 15–22, 2026)
+
+**Goal.** Find out what was actually wrong before customers did.
+
+**Method.** Nine dimensions audited in parallel against the repo *and* live production, every finding then handed to a second reviewer whose only job was to **refute** it ([ADR-020](ENGINEERING-DECISIONS.md#adr-020--adversarial-verification-for-audit-findings)).
+
+**Result.** 89 findings raised, **36 confirmed**, **14 actively refuted** — a 16% refutation rate. Two agents died on an expired OAuth token, so 5 funnel findings were never verified and are labeled *raised*, not *confirmed*. 16 findings closed within the first day.
+
+**The blocker.** A small number of `SECURITY DEFINER` credit RPCs were reachable by the anonymous role. The guard pattern short-circuits on a NULL uid by design — safe only because that role is revoked at the grant level, which these had never received. Closed before launch and verified at the privilege level afterward. *(Specifics are held in the private repo.)* See [ADR-018](ENGINEERING-DECISIONS.md#adr-018--grant-level-lockdown-as-a-distinct-security-layer-above-rls).
+
+**The two-stage fix.** Any authenticated user could read every column of every profile, including minors' legal names and parent contact details. Revoking the grant outright breaks login for 54 frontend read sites, so it shipped in two stages — migrate the reads onto a narrowed `member_directory` view first, revoke only once that build was live ([ADR-019](ENGINEERING-DECISIONS.md#adr-019--two-stage-rollout-for-permission-narrowing-migrations)).
+
+**Also closed.** A COPPA age-gate bypass in the parental-consent step; ad pixels firing on under-13 sessions; two open-redirect gaps; account deletion that deleted nothing; a refunded lesson cancelling the member's whole subscription; a failed booking that ate the credit.
+
+**App Store compliance.** Guideline 3.1.1 anti-steering (no subscription price on native), Academy gated behind coming-soon, Sentry stopped recording minors, report + block mounted on every UGC surface.
+
+**Commit landmarks.** `feat(security): APPLY stage B — the profiles read path is narrowed`, `fix(security): finish stage A — cross-user profile reads migrated to member_directory`, `fix(coppa): close the age-gate bypass in the parental-consent step`.
+
+---
+
 ## Cross-cutting patterns observed across stages
 
-Looking across 564 commits, certain patterns repeat:
+Looking across the whole history, certain patterns repeat:
 
 1. **Plan-first cadence.** Design specs and implementation plans land in `docs/` before the feature ships. See `docs/NEXT-SESSION-*.md`, `docs/PARENT-VIEW-SPEC.md`, `docs/DASHBOARD-ACADEMY-UPGRADE-SPEC.md`.
 2. **Merge commits mark phase gates.** Every meaningful phase ends with a `Merge feat/*` commit, giving clean rollback points.
 3. **Revert-on-doubt.** Experiments that didn't pan out get reverted cleanly (recent branding refresh rolled back via two reverts) — branches stay shippable.
 4. **Post-feature hardening.** `CTO audit: security hardening, error visibility, and production optimization` is a deliberate audit commit pattern that surfaces regularly.
 5. **Type hygiene sweeps.** `Regenerate Supabase types and remove 109 as-any casts` — periodic type debt payment rather than letting it compound.
-6. **Protected-surfaces discipline.** When a system becomes production-critical (notifications, Stripe, credits), it gets marked PROTECTED in a change-control document to signal caution to future contributors.
+6. **Protected-surfaces discipline.** When a system becomes production-critical (notifications, Stripe, credits), it gets marked PROTECTED in `CLAUDE.md` to signal change-control to future contributors.
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit together, and [ENGINEERING-DECISIONS.md](ENGINEERING-DECISIONS.md) for the rationale behind each major choice.
+---
+
+## Reading this timeline
+
+- **Volume is not the point; the sequence is.** Every stage follows one repeating shape: plan → build → harden → protect.
+- **Each stage solves a concrete business problem.** Stages 5–6 ship an AI surface because users need instant feedback; stage 9 ships Stripe Connect because coaches need to get paid; stage 20 hardens security because an audit proved it was needed.
+- **The reasoning lives next door.** See [ARCHITECTURE.md](ARCHITECTURE.md) for how each stage's pieces fit together, and [ENGINEERING-DECISIONS.md](ENGINEERING-DECISIONS.md) for why each choice was made over its alternatives.
